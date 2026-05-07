@@ -74,7 +74,7 @@ func TestNestedSessionAllowsCLICommands(t *testing.T) {
 	t.Run("subcommands_dispatched_before_nested_check", func(t *testing.T) {
 		// These are all the subcommands that should work inside nested sessions
 		subcommands := []string{
-			"add", "list", "ls", "remove", "rm", "status",
+			"add", "list", "ls", "remove", "rm", "status", "restore",
 			"session", "mcp", "skill", "group", "try", "worktree", "wt",
 			"profile", "update", "mcp-proxy", "web", "uninstall", "hooks", "codex-hooks", "codex-notify", "gemini-hooks",
 			"version", "--version", "-v",

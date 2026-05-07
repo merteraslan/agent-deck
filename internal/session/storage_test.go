@@ -185,6 +185,51 @@ func TestLoadLiteEmptyDB(t *testing.T) {
 	}
 }
 
+func TestStorage_LastStartedAt_Roundtrip(t *testing.T) {
+	s := newTestStorage(t)
+	now := time.Unix(1715000000, 0)
+	started := now.Add(2 * time.Hour)
+
+	inst := &Instance{
+		ID:             "started-1",
+		Title:          "Started Session",
+		ProjectPath:    "/tmp/started",
+		GroupPath:      "test-group",
+		Command:        "claude",
+		Tool:           "claude",
+		Status:         StatusError,
+		CreatedAt:      now,
+		LastAccessedAt: now.Add(time.Hour),
+		LastStartedAt:  started,
+	}
+
+	if err := s.SaveWithGroups([]*Instance{inst}, nil); err != nil {
+		t.Fatalf("SaveWithGroups failed: %v", err)
+	}
+
+	lite, _, err := s.LoadLite()
+	if err != nil {
+		t.Fatalf("LoadLite failed: %v", err)
+	}
+	if len(lite) != 1 {
+		t.Fatalf("expected 1 lite instance, got %d", len(lite))
+	}
+	if !lite[0].LastStartedAt.Equal(started) {
+		t.Fatalf("LoadLite LastStartedAt=%v, want %v", lite[0].LastStartedAt, started)
+	}
+
+	loaded, _, err := s.LoadWithGroups()
+	if err != nil {
+		t.Fatalf("LoadWithGroups failed: %v", err)
+	}
+	if len(loaded) != 1 {
+		t.Fatalf("expected 1 loaded instance, got %d", len(loaded))
+	}
+	if !loaded[0].LastStartedAt.Equal(started) {
+		t.Fatalf("LoadWithGroups LastStartedAt=%v, want %v", loaded[0].LastStartedAt, started)
+	}
+}
+
 func TestStorageSaveWithGroups_DedupsClaudeSessionIDs(t *testing.T) {
 	s := newTestStorage(t)
 	now := time.Now()

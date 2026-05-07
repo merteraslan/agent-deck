@@ -18,7 +18,7 @@ import (
 
 // SchemaVersion tracks the current database schema version.
 // Bump this when adding migrations.
-const SchemaVersion = 7
+const SchemaVersion = 8
 
 // StateDB wraps a SQLite database for session/group persistence.
 // Thread-safe for concurrent use from multiple goroutines within one process.
@@ -42,6 +42,7 @@ type InstanceRow struct {
 	TmuxSession        string
 	CreatedAt          time.Time
 	LastAccessed       time.Time
+	LastStartedAt      time.Time
 	ParentSessionID    string
 	IsConductor        bool
 	NoTransitionNotify bool
@@ -211,6 +212,7 @@ func (s *StateDB) Migrate() error {
 			tmux_socket_name TEXT NOT NULL DEFAULT '',
 			created_at      INTEGER NOT NULL,
 			last_accessed   INTEGER NOT NULL DEFAULT 0,
+			last_started_at INTEGER NOT NULL DEFAULT 0,
 			parent_session_id TEXT NOT NULL DEFAULT '',
 			is_conductor            INTEGER NOT NULL DEFAULT 0,
 			no_transition_notify    INTEGER NOT NULL DEFAULT 0,
@@ -348,6 +350,9 @@ func (s *StateDB) Migrate() error {
 		// v8 (issue #697, v1.7.52): title lock blocks Claude session-name sync.
 		// Default 0 keeps the pre-v1.7.52 behavior (#572 sync default-on) for existing rows.
 		"ALTER TABLE instances ADD COLUMN title_locked INTEGER NOT NULL DEFAULT 0",
+		// v8: restart freshness marker used by crash restore and watchdog restart guards.
+		// Default 0 preserves the old "unknown start time" behavior for existing rows.
+		"ALTER TABLE instances ADD COLUMN last_started_at INTEGER NOT NULL DEFAULT 0",
 	}
 	for _, stmt := range alterMigrations {
 		if _, err := tx.Exec(stmt); err != nil {
@@ -398,6 +403,11 @@ func (s *StateDB) Migrate() error {
 			if _, err := tx.Exec(`ALTER TABLE instances ADD COLUMN title_locked INTEGER NOT NULL DEFAULT 0`); err != nil {
 				if !strings.Contains(err.Error(), "duplicate column") {
 					return fmt.Errorf("statedb: migrate v8 title_locked: %w", err)
+				}
+			}
+			if _, err := tx.Exec(`ALTER TABLE instances ADD COLUMN last_started_at INTEGER NOT NULL DEFAULT 0`); err != nil {
+				if !strings.Contains(err.Error(), "duplicate column") {
+					return fmt.Errorf("statedb: migrate v8 last_started_at: %w", err)
 				}
 			}
 		}
@@ -454,15 +464,15 @@ func (s *StateDB) SaveInstance(inst *InstanceRow) error {
 		INSERT OR REPLACE INTO instances (
 			id, title, project_path, group_path, sort_order,
 			command, wrapper, tool, status, tmux_session, tmux_socket_name,
-			created_at, last_accessed,
+			created_at, last_accessed, last_started_at,
 			parent_session_id, is_conductor, no_transition_notify,
 			worktree_path, worktree_repo, worktree_branch,
 			tool_data, title_locked
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		inst.ID, inst.Title, inst.ProjectPath, inst.GroupPath, inst.Order,
 		inst.Command, inst.Wrapper, inst.Tool, inst.Status, inst.TmuxSession, inst.TmuxSocketName,
-		inst.CreatedAt.Unix(), inst.LastAccessed.Unix(),
+		inst.CreatedAt.Unix(), unixOrZero(inst.LastAccessed), unixOrZero(inst.LastStartedAt),
 		inst.ParentSessionID, isConductorInt, noTransitionNotifyInt,
 		inst.WorktreePath, inst.WorktreeRepo, inst.WorktreeBranch,
 		string(toolData), titleLockedInt,
@@ -539,11 +549,11 @@ func (s *StateDB) SaveInstances(insts []*InstanceRow) error {
 		INSERT OR REPLACE INTO instances (
 			id, title, project_path, group_path, sort_order,
 			command, wrapper, tool, status, tmux_session, tmux_socket_name,
-			created_at, last_accessed,
+			created_at, last_accessed, last_started_at,
 			parent_session_id, is_conductor, no_transition_notify,
 			worktree_path, worktree_repo, worktree_branch,
 			tool_data, title_locked
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -573,7 +583,7 @@ func (s *StateDB) SaveInstances(insts []*InstanceRow) error {
 		if _, err := stmt.Exec(
 			inst.ID, inst.Title, inst.ProjectPath, inst.GroupPath, inst.Order,
 			inst.Command, inst.Wrapper, inst.Tool, inst.Status, inst.TmuxSession, inst.TmuxSocketName,
-			inst.CreatedAt.Unix(), inst.LastAccessed.Unix(),
+			inst.CreatedAt.Unix(), unixOrZero(inst.LastAccessed), unixOrZero(inst.LastStartedAt),
 			inst.ParentSessionID, isConductorInt, noTransitionNotifyInt,
 			inst.WorktreePath, inst.WorktreeRepo, inst.WorktreeBranch,
 			string(toolData), titleLockedInt,
@@ -590,7 +600,7 @@ func (s *StateDB) LoadInstances() ([]*InstanceRow, error) {
 	rows, err := s.db.Query(`
 		SELECT id, title, project_path, group_path, sort_order,
 			command, wrapper, tool, status, tmux_session, tmux_socket_name,
-			created_at, last_accessed,
+			created_at, last_accessed, last_started_at,
 			parent_session_id, is_conductor, no_transition_notify,
 			worktree_path, worktree_repo, worktree_branch,
 			tool_data, title_locked
@@ -604,13 +614,13 @@ func (s *StateDB) LoadInstances() ([]*InstanceRow, error) {
 	var result []*InstanceRow
 	for rows.Next() {
 		r := &InstanceRow{}
-		var createdUnix, accessedUnix int64
+		var createdUnix, accessedUnix, startedUnix int64
 		var toolDataStr string
 		var isConductorInt, noTransitionNotifyInt, titleLockedInt int
 		if err := rows.Scan(
 			&r.ID, &r.Title, &r.ProjectPath, &r.GroupPath, &r.Order,
 			&r.Command, &r.Wrapper, &r.Tool, &r.Status, &r.TmuxSession, &r.TmuxSocketName,
-			&createdUnix, &accessedUnix,
+			&createdUnix, &accessedUnix, &startedUnix,
 			&r.ParentSessionID, &isConductorInt, &noTransitionNotifyInt,
 			&r.WorktreePath, &r.WorktreeRepo, &r.WorktreeBranch,
 			&toolDataStr, &titleLockedInt,
@@ -621,6 +631,9 @@ func (s *StateDB) LoadInstances() ([]*InstanceRow, error) {
 		if accessedUnix > 0 {
 			r.LastAccessed = time.Unix(accessedUnix, 0)
 		}
+		if startedUnix > 0 {
+			r.LastStartedAt = time.Unix(startedUnix, 0)
+		}
 		r.IsConductor = isConductorInt != 0
 		r.NoTransitionNotify = noTransitionNotifyInt != 0
 		r.TitleLocked = titleLockedInt != 0
@@ -628,6 +641,13 @@ func (s *StateDB) LoadInstances() ([]*InstanceRow, error) {
 		result = append(result, r)
 	}
 	return result, rows.Err()
+}
+
+func unixOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
 }
 
 // DeleteInstance removes an instance by ID.

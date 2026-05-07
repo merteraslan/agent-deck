@@ -51,6 +51,7 @@ type InstanceData struct {
 	Status             Status    `json:"status"`
 	CreatedAt          time.Time `json:"created_at"`
 	LastAccessedAt     time.Time `json:"last_accessed_at,omitempty"`
+	LastStartedAt      time.Time `json:"last_started_at,omitempty"`
 	TmuxSession        string    `json:"tmux_session"`
 	// TmuxSocketName is the tmux -L selector captured at Instance creation
 	// (issue #687, v1.7.50). Empty for pre-v1.7.50 rows — those keep hitting
@@ -349,6 +350,7 @@ func (s *Storage) SaveWithGroups(instances []*Instance, groupTree *GroupTree) er
 			TmuxSocketName:     inst.TmuxSocketName,
 			CreatedAt:          inst.CreatedAt,
 			LastAccessed:       inst.LastAccessedAt,
+			LastStartedAt:      inst.LastStartedAt,
 			ParentSessionID:    inst.ParentSessionID,
 			IsConductor:        inst.IsConductor,
 			NoTransitionNotify: inst.NoTransitionNotify,
@@ -502,6 +504,7 @@ func (s *Storage) LoadLite() ([]*InstanceData, []*GroupData, error) {
 			Status:             Status(r.Status),
 			CreatedAt:          r.CreatedAt,
 			LastAccessedAt:     r.LastAccessed,
+			LastStartedAt:      r.LastStartedAt,
 			TmuxSession:        r.TmuxSession,
 			TmuxSocketName:     r.TmuxSocketName,
 			WorktreePath:       r.WorktreePath,
@@ -608,6 +611,7 @@ func (s *Storage) LoadWithGroups() ([]*Instance, []*GroupData, error) {
 			Status:             Status(r.Status),
 			CreatedAt:          r.CreatedAt,
 			LastAccessedAt:     r.LastAccessed,
+			LastStartedAt:      r.LastStartedAt,
 			TmuxSession:        r.TmuxSession,
 			TmuxSocketName:     r.TmuxSocketName,
 			WorktreePath:       r.WorktreePath,
@@ -853,6 +857,7 @@ func (s *Storage) convertToInstances(data *StorageData) ([]*Instance, []*GroupDa
 			Status:             instData.Status,
 			CreatedAt:          instData.CreatedAt,
 			LastAccessedAt:     instData.LastAccessedAt,
+			LastStartedAt:      instData.LastStartedAt,
 			WorktreePath:       instData.WorktreePath,
 			WorktreeRepoRoot:   instData.WorktreeRepoRoot,
 			WorktreeBranch:     instData.WorktreeBranch,

@@ -28,6 +28,7 @@ type jsonInstanceData struct {
 	Status          string    `json:"status"`
 	CreatedAt       time.Time `json:"created_at"`
 	LastAccessedAt  time.Time `json:"last_accessed_at,omitempty"`
+	LastStartedAt   time.Time `json:"last_started_at,omitempty"`
 	TmuxSession     string    `json:"tmux_session"`
 
 	WorktreePath     string `json:"worktree_path,omitempty"`
@@ -167,6 +168,7 @@ func MigrateFromJSON(jsonPath string, db *StateDB) (int, int, error) {
 			TmuxSession:     inst.TmuxSession,
 			CreatedAt:       inst.CreatedAt,
 			LastAccessed:    inst.LastAccessedAt,
+			LastStartedAt:   inst.LastStartedAt,
 			ParentSessionID: inst.ParentSessionID,
 			WorktreePath:    inst.WorktreePath,
 			WorktreeRepo:    inst.WorktreeRepoRoot,

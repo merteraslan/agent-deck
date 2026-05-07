@@ -910,6 +910,39 @@ func TestMigrate_OldSchema_SchemaVersionUpdated(t *testing.T) {
 	}
 }
 
+func TestMigrate_OldSchema_LastStartedAtColumn(t *testing.T) {
+	db := createV1SchemaDB(t)
+
+	if err := db.Migrate(); err != nil {
+		t.Fatalf("Migrate(): %v", err)
+	}
+
+	instances, err := db.LoadInstances()
+	if err != nil {
+		t.Fatalf("LoadInstances after migrate: %v", err)
+	}
+	if len(instances) != 1 {
+		t.Fatalf("expected 1 instance after migrate, got %d", len(instances))
+	}
+	if !instances[0].LastStartedAt.IsZero() {
+		t.Fatalf("migrated LastStartedAt=%v, want zero default", instances[0].LastStartedAt)
+	}
+
+	started := time.Unix(1715000500, 0)
+	instances[0].LastStartedAt = started
+	if err := db.SaveInstance(instances[0]); err != nil {
+		t.Fatalf("SaveInstance with LastStartedAt after migrate: %v", err)
+	}
+
+	loaded, err := db.LoadInstances()
+	if err != nil {
+		t.Fatalf("LoadInstances after save: %v", err)
+	}
+	if !loaded[0].LastStartedAt.Equal(started) {
+		t.Fatalf("LastStartedAt=%v, want %v", loaded[0].LastStartedAt, started)
+	}
+}
+
 // TestMigrate_Idempotent verifies that running Migrate() twice on the same DB is safe.
 func TestMigrate_Idempotent(t *testing.T) {
 	db := createV1SchemaDB(t)

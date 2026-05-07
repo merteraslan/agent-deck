@@ -249,6 +249,9 @@ func main() {
 		case "status":
 			handleStatus(profile, args[1:])
 			return
+		case "restore":
+			handleRestore(profile, args[1:])
+			return
 		case "profile":
 			handleProfile(args[1:])
 			return
@@ -2698,6 +2701,7 @@ func printHelp() {
 	fmt.Println("  remove, rm       Remove a session")
 	fmt.Println("  rename, mv       Rename a session")
 	fmt.Println("  status           Show session status summary")
+	fmt.Println("  restore          Restart recent errored sessions")
 	fmt.Println("  session          Manage session lifecycle")
 	fmt.Println("  mcp              Manage MCP servers")
 	fmt.Println("  skill            Manage project skills")
