@@ -175,6 +175,20 @@ Smart polling detects what every agent is doing right now:
 | **Idle** | `○` gray | Ready for commands |
 | **Error** | `✕` red | Something went wrong |
 
+### Restore Recent Errored Sessions
+
+Recover recent sessions that Agent Deck already knows about after a crash, reboot, or closed tmux server:
+
+```bash
+agent-deck restore
+agent-deck restore --dry-run --json
+agent-deck restore --include-stopped --recent 20
+```
+
+`restore` is a narrow crash-recovery command. It refreshes the stored registry, selects recent errored sessions by default, and restarts them in their saved worktree path or project path. Use `--include-stopped` or `--status error,stopped` to include stopped sessions. It does not scan your shell history or restore arbitrary terminal tabs that were never added to Agent Deck.
+
+When a tool session id is known, restore keeps same-folder Codex, Claude, Gemini, and OpenCode sessions separate, so multiple agent sessions in one repo can be restarted independently.
+
 ### Notification Bar
 
 Waiting sessions appear right in your tmux status bar. Press `Ctrl+b`, release, then press `1`–`6` to jump directly to them.
@@ -705,6 +719,7 @@ See [Troubleshooting](skills/agent-deck/references/troubleshooting.md#uninstalli
 ```bash
 agent-deck                        # Launch TUI
 agent-deck add . -c claude        # Add current dir with Claude
+agent-deck restore                # Restart recent errored sessions from the registry
 agent-deck session fork my-proj   # Fork a Claude session
 agent-deck session remove my-proj # Remove stopped/errored session from registry (transcripts preserved)
 agent-deck mcp attach my-proj exa # Attach MCP to session

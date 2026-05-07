@@ -6,6 +6,7 @@ Complete reference for all agent-deck CLI commands.
 
 - [Global Options](#global-options)
 - [Basic Commands](#basic-commands)
+- [Restore Command](#restore-command)
 - [Web Command](#web-command)
 - [Session Commands](#session-commands)
 - [MCP Commands](#mcp-commands)
@@ -92,6 +93,48 @@ agent-deck status [-v|-q|--json]
 - Default: `2 waiting - 5 running - 3 idle`
 - `-v`: Detailed list by status
 - `-q`: Just waiting count (for scripts)
+
+## Restore Command
+
+### restore - Restart recent errored sessions
+
+```bash
+agent-deck restore [options]
+```
+
+`restore` restarts recent errored sessions from the existing Agent Deck registry. It is a crash-recovery helper for sessions that were already added to Agent Deck, not a workspace scanner.
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Show what would be restored without restarting or saving |
+| `--json` | Emit `restored`, `skipped`, `failed`, `dry_run`, and `count` |
+| `-q, --quiet` | Suppress success output; failures still print to stderr |
+| `--recent <n>` | Restore at most N recent matching sessions (default: 10) |
+| `--last-active <n>` | Alias for `--recent`; cannot be combined with `--recent` |
+| `--include-stopped` | Include stopped sessions in addition to errored sessions |
+| `--status <list>` | Comma-separated restore statuses; supported: `error`, `stopped` |
+
+Examples:
+
+```bash
+agent-deck restore
+agent-deck restore --dry-run --json
+agent-deck restore --include-stopped --recent 20
+agent-deck restore --status error,stopped
+```
+
+Selection details:
+- Default status filter is `error`.
+- `--status` overrides both the default and `--include-stopped`.
+- Live statuses (`running`, `waiting`, `idle`, `starting`) are rejected.
+- Restore uses the saved worktree path when present, otherwise the saved project path.
+- Missing paths are skipped without failing the whole command.
+- Same-folder sessions are deduplicated by tool, restore path, worktree branch, command, wrapper, and known provider session id.
+
+Exit codes:
+- `0`: success, skipped only, or no candidates
+- `1`: at least one session failed to restore
+- `2`: invalid arguments, config error, or database load failure
 
 ## Web Command
 
